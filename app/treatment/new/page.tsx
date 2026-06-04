@@ -1,0 +1,183 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createTreatment } from "@/lib/expander";
+import { todayISO } from "@/lib/dateUtils";
+import ExpanderIcon from "@/components/ExpanderIcon";
+
+const inputCls =
+  "w-full rounded-2xl px-4 py-3 text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 transition-colors";
+const inputStyle = { border: "1.5px solid #E2E8F0", backgroundColor: "#FAFAFA" };
+
+export default function NewTreatmentPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    child_name: "",
+    start_date: todayISO(),
+    total_days: "21",
+    turns_per_day: "1",
+    reminder_time: "",
+    notes: "",
+  });
+
+  function set(field: string, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const totalDays = parseInt(form.total_days, 10);
+    const turnsPerDay = parseInt(form.turns_per_day, 10);
+
+    if (!form.child_name || !form.start_date) {
+      setError("Name and start date are required.");
+      return;
+    }
+    if (isNaN(totalDays) || totalDays < 1) {
+      setError("Total days must be at least 1.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      await createTreatment({
+        child_name: form.child_name,
+        start_date: form.start_date,
+        total_days: totalDays,
+        turns_per_day: turnsPerDay || 1,
+        reminder_time: form.reminder_time || null,
+        notes: form.notes || null,
+        status: "active",
+      });
+      router.push("/");
+    } catch {
+      setError("Could not create the treatment. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      {/* Hero */}
+      <div className="text-center mb-7">
+        <div className="flex justify-center mb-3">
+          <ExpanderIcon size={64} showSparkle />
+        </div>
+        <h1 className="text-xl font-black text-slate-800">Set up the treatment</h1>
+        <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">
+          Add the first details so we can build the daily checklist.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+            Child&apos;s name *
+          </label>
+          <input
+            type="text"
+            value={form.child_name}
+            onChange={(e) => set("child_name", e.target.value)}
+            placeholder="e.g. Emma"
+            className={inputCls}
+            style={inputStyle}
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+            Start date *
+          </label>
+          <input
+            type="date"
+            value={form.start_date}
+            onChange={(e) => set("start_date", e.target.value)}
+            className={inputCls}
+            style={inputStyle}
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+            Total days
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={form.total_days}
+            onChange={(e) => set("total_days", e.target.value)}
+            className={inputCls}
+            style={inputStyle}
+          />
+          <p className="text-slate-400 text-xs mt-1.5">
+            Default is 21. You can change this later from Settings if your dentist updates the plan.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+            Turns per day
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={form.turns_per_day}
+            onChange={(e) => set("turns_per_day", e.target.value)}
+            className={inputCls}
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+            Reminder time <span className="text-slate-400 font-normal">(optional)</span>
+          </label>
+          <input
+            type="time"
+            value={form.reminder_time}
+            onChange={(e) => set("reminder_time", e.target.value)}
+            className={inputCls}
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-600 mb-1.5">
+            Notes <span className="text-slate-400 font-normal">(optional)</span>
+          </label>
+          <textarea
+            value={form.notes}
+            onChange={(e) => set("notes", e.target.value)}
+            rows={3}
+            placeholder="Anything worth remembering…"
+            className={`${inputCls} resize-none`}
+            style={inputStyle}
+          />
+        </div>
+
+        {error && (
+          <p className="text-red-500 text-sm rounded-xl px-3 py-2 bg-red-50">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full text-white font-bold rounded-2xl py-4 transition-all active:scale-95 disabled:opacity-60 shadow-md"
+          style={{ background: "linear-gradient(135deg, #8B5CF6, #7C3AED)" }}
+        >
+          {loading ? "Creating…" : "Start the treatment 🌸"}
+        </button>
+      </form>
+    </div>
+  );
+}
