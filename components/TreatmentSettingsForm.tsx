@@ -58,19 +58,15 @@ export default function TreatmentSettingsForm({
     setLoading(true);
     setError(null);
     try {
-      await updateTreatment(
-        treatment.id,
-        {
-          child_name: form.child_name,
-          start_date: form.start_date,
-          total_days: totalDays,
-          turns_per_day: turnsPerDay,
-          reminder_time: form.reminder_time || null,
-          notes: form.notes || null,
-          status: form.status,
-        },
-        treatment.total_days
-      );
+      await updateTreatment(treatment.id, {
+        child_name: form.child_name,
+        start_date: form.start_date,
+        total_days: totalDays,
+        turns_per_day: turnsPerDay,
+        reminder_time: form.reminder_time || null,
+        notes: form.notes || null,
+        status: form.status,
+      });
       setSaved(true);
       router.refresh();
     } catch {
@@ -81,7 +77,6 @@ export default function TreatmentSettingsForm({
   }
 
   const newTotal = parseInt(form.total_days, 10);
-  const daysDiff = isNaN(newTotal) ? 0 : newTotal - treatment.total_days;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -137,14 +132,11 @@ export default function TreatmentSettingsForm({
               className={inputCls}
               style={inputStyle}
             />
-            {daysDiff > 0 && (
-              <p className="text-violet-600 text-xs mt-1.5 flex items-center gap-1">
-                <span>✨</span> Adding {daysDiff} new day{daysDiff > 1 ? "s" : ""} — daily logs will be generated automatically.
-              </p>
-            )}
-            {daysDiff < 0 && (
-              <p className="text-amber-600 text-xs mt-1.5">
-                Existing logs beyond day {newTotal} will be kept but won&apos;t count toward progress.
+            {!isNaN(newTotal) && newTotal !== treatment.total_days && (
+              <p className={`text-xs mt-1.5 ${newTotal > treatment.total_days ? "text-violet-600" : "text-amber-600"}`}>
+                {newTotal > treatment.total_days
+                  ? `✨ Target increases to ${newTotal} completed turns — future logs will be created as needed.`
+                  : `Reducing the target to ${newTotal} completed turns. All historical logs are preserved.`}
               </p>
             )}
             <p className="text-slate-400 text-xs mt-1">

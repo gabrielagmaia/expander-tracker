@@ -1,6 +1,7 @@
 import { getSupabase } from "./supabaseClient";
 import {
-  currentTreatmentDay,
+  addDays,
+  dayNumberForDate,
   logDateForDay,
   todayISO,
 } from "./dateUtils";
@@ -53,8 +54,7 @@ export async function createTreatment(
 
 export async function updateTreatment(
   id: string,
-  updates: Partial<Omit<ExpanderTreatment, "id" | "created_at" | "updated_at">>,
-  previousTotalDays?: number
+  updates: Partial<Omit<ExpanderTreatment, "id" | "created_at" | "updated_at">>
 ): Promise<ExpanderTreatment> {
   const { data, error } = await getSupabase()
     .from("expander_treatments")
@@ -64,17 +64,11 @@ export async function updateTreatment(
     .single();
   if (error) throw error;
 
-  if (
-    updates.total_days !== undefined &&
-    previousTotalDays !== undefined &&
-    updates.total_days > previousTotalDays
-  ) {
-    await extendDailyLogs(
-      id,
-      data.start_date,
-      previousTotalDays,
-      updates.total_days
-    );
+  // Whenever total_days changes, ensure enough future calendar logs exist.
+  // We never delete historical logs — only add missing ones.
+  if (updates.total_days !== undefined) {
+    const logs = await getDailyLogs(id);
+    await ensureActiveLogs(id, data.start_date, data.total_days, logs);
   }
 
   return data;
@@ -99,35 +93,61 @@ export async function generateDailyLogs(
 
   const { error } = await getSupabase()
     .from("expander_daily_logs")
-    .upsert(logs, { onConflict: "treatment_id,day_number", ignoreDuplicates: true });
+    .upsert(logs, { onConflict: "treatment_id,log_date", ignoreDuplicates: true });
   if (error) throw error;
 }
 
-export async function extendDailyLogs(
+/**
+ * Ensures calendar logs exist from start_date through (today + remainingDays),
+ * so that missed or skipped days never leave the treatment without a future row.
+ *
+ * Returns true if any new logs were inserted (so callers can re-fetch if needed).
+ */
+export async function ensureActiveLogs(
   treatmentId: string,
   startDate: string,
-  previousTotal: number,
-  newTotal: number
-): Promise<void> {
-  const logs = Array.from(
-    { length: newTotal - previousTotal },
-    (_, i) => {
-      const dayNumber = previousTotal + i + 1;
-      return {
-        treatment_id: treatmentId,
-        day_number: dayNumber,
-        log_date: logDateForDay(startDate, dayNumber),
-        status: "pending" as const,
-      };
-    }
-  );
+  totalDays: number,
+  existingLogs: ExpanderDailyLog[]
+): Promise<boolean> {
+  const completedDays = existingLogs.filter((l) => l.status === "done").length;
+  if (completedDays >= totalDays) return false; // treatment already complete
 
-  if (logs.length === 0) return;
+  const remainingDays = totalDays - completedDays;
+  const today = todayISO();
+  const neededThrough = addDays(today, remainingDays);
+
+  const existingDates = new Set(existingLogs.map((l) => l.log_date));
+
+  const logsToCreate: Array<{
+    treatment_id: string;
+    day_number: number;
+    log_date: string;
+    status: "pending";
+  }> = [];
+
+  let cursor = startDate;
+  while (cursor <= neededThrough) {
+    if (!existingDates.has(cursor)) {
+      logsToCreate.push({
+        treatment_id: treatmentId,
+        day_number: dayNumberForDate(startDate, cursor),
+        log_date: cursor,
+        status: "pending",
+      });
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  if (logsToCreate.length === 0) return false;
 
   const { error } = await getSupabase()
     .from("expander_daily_logs")
-    .upsert(logs, { onConflict: "treatment_id,day_number", ignoreDuplicates: true });
+    .upsert(logsToCreate, {
+      onConflict: "treatment_id,log_date",
+      ignoreDuplicates: true,
+    });
   if (error) throw error;
+  return true;
 }
 
 export async function getDailyLogs(
@@ -137,7 +157,7 @@ export async function getDailyLogs(
     .from("expander_daily_logs")
     .select("*")
     .eq("treatment_id", treatmentId)
-    .order("day_number", { ascending: true });
+    .order("log_date", { ascending: true });
   if (error) throw error;
   return data ?? [];
 }
@@ -212,25 +232,48 @@ export function calculateProgress(
   treatment: ExpanderTreatment,
   logs: ExpanderDailyLog[]
 ): TreatmentProgress {
-  const currentDay = currentTreatmentDay(treatment.start_date);
   const totalDays = treatment.total_days;
 
-  const completedDays = logs.filter(
-    (l) => l.status === "done" && l.day_number <= totalDays
-  ).length;
-
+  // Only completed turns count — missed/skipped/pending do not reduce the target.
+  const completedDays = logs.filter((l) => l.status === "done").length;
+  const remainingDays = Math.max(totalDays - completedDays, 0);
   const progressPercentage =
     totalDays > 0
       ? Math.min(100, Math.round((completedDays / totalDays) * 100))
       : 0;
+  const isComplete = completedDays >= totalDays;
+
+  let estimatedEndDate: string | null = null;
+  if (!isComplete) {
+    // Estimate: complete one turn per calendar day from today, no future misses.
+    estimatedEndDate = addDays(todayISO(), remainingDays);
+  }
 
   return {
-    currentDay: currentDay ?? 0,
     totalDays,
     completedDays,
+    remainingDays,
     progressPercentage,
-    isComplete: completedDays >= totalDays,
+    isComplete,
+    nextTreatmentDayNumber: completedDays + 1,
+    estimatedEndDate,
   };
+}
+
+/**
+ * Returns a Map from log ID to its 1-based completed-treatment-turn number,
+ * for every log with status "done" ordered by log_date ascending.
+ * Used by UI components to display "Treatment Day X" accurately.
+ */
+export function buildCompletedTurnMap(
+  logs: ExpanderDailyLog[]
+): Map<string, number> {
+  const doneLogs = [...logs]
+    .filter((l) => l.status === "done")
+    .sort((a, b) => (a.log_date < b.log_date ? -1 : 1));
+  const map = new Map<string, number>();
+  doneLogs.forEach((l, i) => map.set(l.id, i + 1));
+  return map;
 }
 
 // ─── Appointments ─────────────────────────────────────────────────────────────

@@ -10,10 +10,12 @@ import type {
 import {
   getActiveTreatment,
   getDailyLogs,
-  getTodayLog,
   calculateProgress,
+  buildCompletedTurnMap,
+  ensureActiveLogs,
   getNextAppointment,
 } from "@/lib/expander";
+import { todayISO } from "@/lib/dateUtils";
 import EmptyState from "@/components/EmptyState";
 import ProgressCard from "@/components/ProgressCard";
 import TodayTurnCard from "@/components/TodayTurnCard";
@@ -44,11 +46,27 @@ export default function DashboardPage() {
       const t = await getActiveTreatment();
       setTreatment(t);
       if (t) {
-        const [allLogs, today, appt] = await Promise.all([
+        const [initialLogs, appt] = await Promise.all([
           getDailyLogs(t.id),
-          getTodayLog(t.id),
           getNextAppointment(t.id),
         ]);
+
+        // Ensure a calendar log exists for today (and future dates needed to
+        // complete remaining turns). Only runs when treatment is active.
+        let allLogs = initialLogs;
+        if (t.status === "active") {
+          const created = await ensureActiveLogs(
+            t.id,
+            t.start_date,
+            t.total_days,
+            initialLogs
+          );
+          if (created) {
+            allLogs = await getDailyLogs(t.id);
+          }
+        }
+
+        const today = allLogs.find((l) => l.log_date === todayISO()) ?? null;
         setLogs(allLogs);
         setTodayLog(today);
         setNextAppt(appt);
@@ -82,8 +100,18 @@ export default function DashboardPage() {
   }
 
   const progress = calculateProgress(treatment, logs);
+  const completedTurnNumbers = buildCompletedTurnMap(logs);
+
+  // For the today card: if today is done, show its completed turn number;
+  // otherwise show the next turn number to complete.
+  const todayTurnNumber =
+    todayLog && todayLog.status === "done"
+      ? (completedTurnNumbers.get(todayLog.id) ?? progress.nextTreatmentDayNumber)
+      : progress.nextTreatmentDayNumber;
+
+  // Most recent logs first, sorted by calendar date.
   const recentLogs = [...logs]
-    .sort((a, b) => b.day_number - a.day_number)
+    .sort((a, b) => (a.log_date > b.log_date ? -1 : 1))
     .slice(0, 5);
 
   return (
@@ -106,6 +134,7 @@ export default function DashboardPage() {
       <TodayTurnCard
         log={todayLog}
         treatmentId={treatment.id}
+        todayTurnNumber={todayTurnNumber}
         onUpdated={load}
       />
 
@@ -124,7 +153,10 @@ export default function DashboardPage() {
               See all →
             </Link>
           </div>
-          <DailyLogList logs={recentLogs} totalDays={treatment.total_days} />
+          <DailyLogList
+            logs={recentLogs}
+            completedTurnNumbers={completedTurnNumbers}
+          />
         </div>
       )}
     </div>

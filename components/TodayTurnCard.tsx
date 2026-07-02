@@ -10,12 +10,28 @@ import StatusBadge from "./StatusBadge";
 interface TodayTurnCardProps {
   log: ExpanderDailyLog | null;
   treatmentId: string;
+  /** 1-based treatment turn number for today's card. */
+  todayTurnNumber: number;
   onUpdated: () => void;
+}
+
+function todayLabel(status: DailyLogStatus, turnNumber: number): string {
+  switch (status) {
+    case "done":
+      return `Treatment Day ${turnNumber} — Done!`;
+    case "missed":
+      return `Today was missed — next will be Treatment Day ${turnNumber}`;
+    case "skipped_by_dentist":
+      return `Skipped by dentist — next will be Treatment Day ${turnNumber}`;
+    default:
+      return `Treatment Day ${turnNumber}`;
+  }
 }
 
 export default function TodayTurnCard({
   log,
   treatmentId,
+  todayTurnNumber,
   onUpdated,
 }: TodayTurnCardProps) {
   const [loading, setLoading] = useState(false);
@@ -62,6 +78,7 @@ export default function TodayTurnCard({
   }
 
   const isDone = log.status === "done";
+  const isMissed = log.status === "missed";
 
   return (
     <div
@@ -84,7 +101,7 @@ export default function TodayTurnCard({
       </div>
 
       <p className="text-slate-500 text-xs mb-4 pl-6">
-        {formatDateLong(log.log_date)} · Day {log.day_number}
+        {formatDateLong(log.log_date)} · {todayLabel(log.status, todayTurnNumber)}
       </p>
 
       {isDone ? (
@@ -114,7 +131,7 @@ export default function TodayTurnCard({
         </button>
       )}
 
-      {log.status === "missed" && (
+      {isMissed && (
         <p className="mt-3 text-orange-700 text-xs text-center bg-orange-50 rounded-xl p-2.5" style={{ border: "1px solid #FED7AA" }}>
           Please follow your dentist&apos;s instructions if a turn was missed.
         </p>

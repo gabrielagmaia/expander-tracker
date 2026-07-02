@@ -55,9 +55,13 @@ export interface DentistAppointment {
 }
 
 export interface TreatmentProgress {
-  currentDay: number;
   totalDays: number;
   completedDays: number;
+  remainingDays: number;
   progressPercentage: number;
   isComplete: boolean;
+  /** 1-based index of the next turn to complete (completedDays + 1). */
+  nextTreatmentDayNumber: number;
+  /** YYYY-MM-DD estimate assuming no future misses; null when treatment is complete. */
+  estimatedEndDate: string | null;
 }

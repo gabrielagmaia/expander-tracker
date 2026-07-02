@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { ExpanderTreatment, ExpanderDailyLog } from "@/types/expander";
-import { getActiveTreatment, getDailyLogs } from "@/lib/expander";
+import {
+  getActiveTreatment,
+  getDailyLogs,
+  buildCompletedTurnMap,
+} from "@/lib/expander";
 import DailyLogList from "@/components/DailyLogList";
 import EmptyState from "@/components/EmptyState";
 
@@ -55,42 +59,27 @@ export default function DaysPage() {
     );
   }
 
-  const activeLogs = logs.filter((l) => l.day_number <= treatment.total_days);
-  const extraLogs = logs.filter((l) => l.day_number > treatment.total_days);
+  const doneDays = logs.filter((l) => l.status === "done").length;
+  const completedTurnNumbers = buildCompletedTurnMap(logs);
 
-  const doneDays = activeLogs.filter((l) => l.status === "done").length;
+  // Logs are already ordered by log_date ascending from getDailyLogs.
+  // Show most recent first so users see today at the top.
+  const sortedLogs = [...logs].sort((a, b) => (a.log_date > b.log_date ? -1 : 1));
 
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-xl font-black text-slate-800">Daily checklist 📋</h1>
         <p className="text-slate-400 text-sm mt-1">
-          {treatment.child_name} · {doneDays} done · {treatment.total_days} total days
+          {treatment.child_name} · {doneDays} of {treatment.total_days} completed
         </p>
       </div>
 
       <DailyLogList
-        logs={activeLogs}
-        totalDays={treatment.total_days}
-        showLabel="Treatment days"
+        logs={sortedLogs}
+        completedTurnNumbers={completedTurnNumbers}
+        showLabel="Treatment history"
       />
-
-      {extraLogs.length > 0 && (
-        <div className="mt-8">
-          <div
-            className="rounded-2xl p-4"
-            style={{ backgroundColor: "#FEF9F0", border: "1px solid #FED7AA" }}
-          >
-            <p className="text-amber-700 font-semibold text-xs uppercase tracking-wide mb-1">
-              Historical / extra days
-            </p>
-            <p className="text-amber-600 text-xs mb-3">
-              These days are beyond the current total and don&apos;t count toward progress.
-            </p>
-            <DailyLogList logs={extraLogs} totalDays={treatment.total_days} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

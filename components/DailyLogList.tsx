@@ -3,14 +3,15 @@ import DailyLogItem from "./DailyLogItem";
 
 interface DailyLogListProps {
   logs: ExpanderDailyLog[];
-  totalDays: number;
+  /** Map from log ID → 1-based completed-treatment-turn number (for done logs). */
+  completedTurnNumbers?: Map<string, number>;
   limit?: number;
   showLabel?: string;
 }
 
 export default function DailyLogList({
   logs,
-  totalDays,
+  completedTurnNumbers,
   limit,
   showLabel,
 }: DailyLogListProps) {
@@ -33,7 +34,11 @@ export default function DailyLogList({
       )}
       <div className="flex flex-col gap-2">
         {displayed.map((log) => (
-          <DailyLogItem key={log.id} log={log} totalDays={totalDays} />
+          <DailyLogItem
+            key={log.id}
+            log={log}
+            completedTurnNumber={completedTurnNumbers?.get(log.id)}
+          />
         ))}
       </div>
     </div>

@@ -61,33 +61,21 @@ export function formatTime(isoTimestamp: string): string {
 }
 
 /**
- * Returns the 1-based day number for today relative to start_date.
- * Returns null if today is before start_date.
- */
-export function currentTreatmentDay(startDate: string): number | null {
-  const today = todayISO();
-  const [sy, sm, sd] = startDate.split("-").map(Number);
-  const [ty, tm, td] = today.split("-").map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const todayDate = new Date(ty, tm - 1, td);
-  const diffMs = todayDate.getTime() - start.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return null;
-  return diffDays + 1; // Day 1 = start_date
-}
-
-/**
- * Returns whether today is past the treatment end date.
- */
-export function isTreatmentOver(startDate: string, totalDays: number): boolean {
-  const day = currentTreatmentDay(startDate);
-  if (day === null) return false;
-  return day > totalDays;
-}
-
-/**
  * Returns the log_date for a given day_number (1-based) and start_date.
  */
 export function logDateForDay(startDate: string, dayNumber: number): string {
   return addDays(startDate, dayNumber - 1);
+}
+
+/**
+ * Returns the 1-based calendar sequence number for a given log_date relative to
+ * start_date. Inverse of logDateForDay. Does not represent a completed turn count.
+ */
+export function dayNumberForDate(startDate: string, logDate: string): number {
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ly, lm, ld] = logDate.split("-").map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const log = new Date(ly, lm - 1, ld);
+  const diffMs = log.getTime() - start.getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
 }

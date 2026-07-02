@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import type { TreatmentProgress } from "@/types/expander";
+import { formatDateLong } from "@/lib/dateUtils";
 
 interface ProgressCardProps {
   childName: string;
@@ -18,7 +19,13 @@ export default function ProgressCard({
   childName,
   progress,
 }: ProgressCardProps) {
-  const { currentDay, totalDays, completedDays, progressPercentage } = progress;
+  const {
+    totalDays,
+    completedDays,
+    remainingDays,
+    progressPercentage,
+    estimatedEndDate,
+  } = progress;
 
   return (
     <div className="bg-white rounded-3xl shadow-sm p-5" style={{ border: "1.5px solid #EDE9FE" }}>
@@ -40,9 +47,9 @@ export default function ProgressCard({
           <p className="font-bold text-slate-800 text-xl leading-tight">{childName}</p>
         </div>
         <div className="text-right">
-          <p className="text-slate-400 text-xs mb-0.5">Current day</p>
+          <p className="text-slate-400 text-xs mb-0.5">Completed</p>
           <p className="font-black text-violet-600 text-3xl leading-none">
-            {currentDay > 0 ? currentDay : "—"}
+            {completedDays}
             <span className="text-slate-300 text-lg font-semibold">/{totalDays}</span>
           </p>
         </div>
@@ -65,12 +72,21 @@ export default function ProgressCard({
 
       <div className="flex items-center justify-between">
         <p className="text-slate-500 text-xs">
-          <span className="font-semibold text-slate-700">{completedDays}</span> days done
+          <span className="font-semibold text-slate-700">{remainingDays}</span> days remaining
           {" · "}
           <span className="font-semibold text-slate-700">{totalDays}</span> total
         </p>
         <p className="font-bold text-violet-600 text-sm">{progressPercentage}%</p>
       </div>
+
+      {estimatedEndDate && remainingDays > 0 && (
+        <p className="mt-2 text-slate-400 text-xs">
+          Estimated completion:{" "}
+          <span className="font-semibold text-slate-600">
+            {formatDateLong(estimatedEndDate)}
+          </span>
+        </p>
+      )}
 
       <p className="mt-3 text-xs text-slate-500 italic">
         {encouragement(progressPercentage)}

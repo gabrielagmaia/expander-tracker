@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle2, ChevronLeft } from "lucide-react";
 import type { ExpanderDailyLog, DailyLogStatus } from "@/types/expander";
-import { getDailyLogById, updateDailyLog } from "@/lib/expander";
+import {
+  getDailyLogById,
+  getDailyLogs,
+  updateDailyLog,
+  buildCompletedTurnMap,
+} from "@/lib/expander";
 import { formatDateLong, formatTime } from "@/lib/dateUtils";
 import StatusBadge from "@/components/StatusBadge";
 
@@ -27,10 +32,24 @@ function Spinner() {
   );
 }
 
+function pageTitle(log: ExpanderDailyLog, turnNumber?: number): string {
+  switch (log.status) {
+    case "done":
+      return turnNumber !== undefined ? `Treatment Day ${turnNumber}` : "Done";
+    case "missed":
+      return "Missed day";
+    case "skipped_by_dentist":
+      return "Skipped by dentist";
+    default:
+      return "Next treatment day";
+  }
+}
+
 export default function DayDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [log, setLog] = useState<ExpanderDailyLog | null>(null);
+  const [turnNumber, setTurnNumber] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +74,13 @@ export default function DayDetailPage() {
               : "",
             notes: data.notes ?? "",
           });
+
+          // Compute the completed-turn position for this log if it is done.
+          if (data.status === "done") {
+            const allLogs = await getDailyLogs(data.treatment_id);
+            const turnMap = buildCompletedTurnMap(allLogs);
+            setTurnNumber(turnMap.get(data.id));
+          }
         }
       } catch {
         setError("Could not load this day. Please refresh.");
@@ -85,6 +111,16 @@ export default function DayDetailPage() {
             : null,
       });
       setLog(updated);
+
+      // Recompute turn number if status changed.
+      if (updated.status === "done") {
+        const allLogs = await getDailyLogs(updated.treatment_id);
+        const turnMap = buildCompletedTurnMap(allLogs);
+        setTurnNumber(turnMap.get(updated.id));
+      } else {
+        setTurnNumber(undefined);
+      }
+
       setSaved(true);
     } catch {
       setError("Could not save. Please try again.");
@@ -120,7 +156,7 @@ export default function DayDetailPage() {
       >
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-black text-slate-800">
-            Day {log.day_number}
+            {pageTitle(log, turnNumber)}
           </h1>
           <StatusBadge status={log.status} />
         </div>
