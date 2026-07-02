@@ -9,10 +9,12 @@ import type {
 } from "@/types/expander";
 import {
   getActiveTreatment,
+  getLatestTreatment,
   getDailyLogs,
   calculateProgress,
   buildCompletedTurnMap,
   ensureActiveLogs,
+  getDashboardState,
   getNextAppointment,
 } from "@/lib/expander";
 import { todayISO } from "@/lib/dateUtils";
@@ -32,7 +34,8 @@ function Spinner() {
 }
 
 export default function DashboardPage() {
-  const [treatment, setTreatment] = useState<ExpanderTreatment | null>(null);
+  const [activeTreatment, setActiveTreatment] = useState<ExpanderTreatment | null>(null);
+  const [latestTreatment, setLatestTreatment] = useState<ExpanderTreatment | null>(null);
   const [logs, setLogs] = useState<ExpanderDailyLog[]>([]);
   const [todayLog, setTodayLog] = useState<ExpanderDailyLog | null>(null);
   const [nextAppt, setNextAppt] = useState<DentistAppointment | null>(null);
@@ -43,27 +46,25 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const t = await getActiveTreatment();
-      setTreatment(t);
+      const [active, latest] = await Promise.all([
+        getActiveTreatment(),
+        getLatestTreatment(),
+      ]);
+      setActiveTreatment(active);
+      setLatestTreatment(latest);
+
+      const t = active ?? latest;
       if (t) {
         const [initialLogs, appt] = await Promise.all([
           getDailyLogs(t.id),
           getNextAppointment(t.id),
         ]);
 
-        // Ensure a calendar log exists for today (and future dates needed to
-        // complete remaining turns). Only runs when treatment is active.
         let allLogs = initialLogs;
-        if (t.status === "active") {
-          const created = await ensureActiveLogs(
-            t.id,
-            t.start_date,
-            t.total_days,
-            initialLogs
-          );
-          if (created) {
-            allLogs = await getDailyLogs(t.id);
-          }
+        if (active) {
+          // Only create future logs for the active treatment.
+          const created = await ensureActiveLogs(active, initialLogs);
+          if (created) allLogs = await getDailyLogs(active.id);
         }
 
         const today = allLogs.find((l) => l.log_date === todayISO()) ?? null;
@@ -88,35 +89,83 @@ export default function DashboardPage() {
     return <p className="text-red-400 text-sm text-center py-8">{error}</p>;
   }
 
-  if (!treatment) {
+  const state = getDashboardState(activeTreatment, latestTreatment);
+
+  // ── State 3: no treatments at all ──────────────────────────────────────────
+  if (state === "empty") {
     return (
       <EmptyState
         title="Let's get started! 🌸"
         description="Set up the first treatment and keep every tiny step organized."
         actionLabel="Create treatment"
-        actionHref="/treatment/new"
+        actionHref="/treatments/new"
       />
     );
   }
 
-  const progress = calculateProgress(treatment, logs);
+  // ── State 2: completed/paused history, no active treatment ─────────────────
+  if (state === "has_history") {
+    const t = latestTreatment!;
+    const progress = calculateProgress(t, logs);
+
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="text-center py-1">
+          <div className="flex justify-center mb-3">
+            <ExpanderIcon size={52} showSparkle />
+          </div>
+          <p className="text-2xl font-black text-slate-800 leading-snug">
+            {progress.isComplete ? "Treatment complete! 🎉" : "No active treatment"}
+          </p>
+          <p className="text-slate-400 text-sm mt-1">
+            {t.child_name} · {progress.completedDays} of {t.total_days} turns completed
+          </p>
+        </div>
+
+        <ProgressCard childName={t.child_name} progress={progress} />
+
+        <div className="flex flex-col gap-2">
+          <Link
+            href={`/treatments/${t.id}`}
+            className="block text-center font-bold text-sm rounded-2xl py-3.5 transition-all active:scale-95 shadow-sm"
+            style={{ backgroundColor: "#EDE9FE", color: "#6D28D9", border: "1.5px solid #DDD6FE" }}
+          >
+            View journey →
+          </Link>
+          <Link
+            href="/treatments/new"
+            className="block text-center text-white font-bold text-sm rounded-2xl py-3.5 transition-all active:scale-95 shadow-md"
+            style={{ background: "linear-gradient(135deg, #8B5CF6, #7C3AED)" }}
+          >
+            Start new treatment
+          </Link>
+          <Link
+            href="/treatments"
+            className="block text-center text-slate-400 text-sm font-medium py-2"
+          >
+            View all treatments →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── State 1: active treatment ───────────────────────────────────────────────
+  const t = activeTreatment!;
+  const progress = calculateProgress(t, logs);
   const completedTurnNumbers = buildCompletedTurnMap(logs);
 
-  // For the today card: if today is done, show its completed turn number;
-  // otherwise show the next turn number to complete.
   const todayTurnNumber =
     todayLog && todayLog.status === "done"
       ? (completedTurnNumbers.get(todayLog.id) ?? progress.nextTreatmentDayNumber)
       : progress.nextTreatmentDayNumber;
 
-  // Most recent logs first, sorted by calendar date.
   const recentLogs = [...logs]
     .sort((a, b) => (a.log_date > b.log_date ? -1 : 1))
     .slice(0, 5);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Greeting hero */}
       <div className="text-center py-1">
         <div className="flex justify-center mb-3">
           <ExpanderIcon size={52} showSparkle />
@@ -124,16 +173,14 @@ export default function DashboardPage() {
         <p className="text-2xl font-black text-slate-800 leading-snug">
           Hi! Ready for today&apos;s tiny turn?
         </p>
-        <p className="text-slate-400 text-sm mt-1">
-          One tiny turn, one big smile.
-        </p>
+        <p className="text-slate-400 text-sm mt-1">One tiny turn, one big smile.</p>
       </div>
 
-      <ProgressCard childName={treatment.child_name} progress={progress} />
+      <ProgressCard childName={t.child_name} progress={progress} />
 
       <TodayTurnCard
         log={todayLog}
-        treatmentId={treatment.id}
+        treatmentId={t.id}
         todayTurnNumber={todayTurnNumber}
         onUpdated={load}
       />

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
 import type { ExpanderTreatment } from "@/types/expander";
-import { getActiveTreatment } from "@/lib/expander";
+import { getLatestTreatment } from "@/lib/expander";
 import TreatmentSettingsForm from "@/components/TreatmentSettingsForm";
 import EmptyState from "@/components/EmptyState";
 
@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getActiveTreatment()
+    getLatestTreatment()
       .then(setTreatment)
       .catch(() => setError("Could not load settings."))
       .finally(() => setLoading(false));
@@ -39,7 +39,7 @@ export default function SettingsPage() {
         title="No treatment yet"
         description="Create a treatment first."
         actionLabel="Create treatment"
-        actionHref="/treatment/new"
+        actionHref="/treatments/new"
       />
     );
   }

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { calculateProgress, buildCompletedTurnMap } from "@/lib/expander";
+import {
+  calculateProgress,
+  buildCompletedTurnMap,
+  shouldEnsureLogs,
+  getDashboardState,
+} from "@/lib/expander";
+import type { DashboardState } from "@/types/expander";
 import {
   addDays,
   dayNumberForDate,
@@ -19,6 +25,7 @@ const baseTreatment = (total_days: number): ExpanderTreatment => ({
   reminder_time: null,
   status: "active",
   notes: null,
+  completed_at: null,
   created_at: "2026-06-01T00:00:00Z",
   updated_at: "2026-06-01T00:00:00Z",
 });
@@ -319,6 +326,121 @@ describe("dateUtils", () => {
       expect(m).toBe(date.getMonth() + 1);
       expect(d).toBe(date.getDate());
     });
+  });
+});
+
+// ─── shouldEnsureLogs ────────────────────────────────────────────────────────
+
+describe("shouldEnsureLogs", () => {
+  it("returns true when active and completedDays < totalDays", () => {
+    expect(shouldEnsureLogs("active", 5, 21)).toBe(true);
+  });
+
+  it("returns false when status is 'completed'", () => {
+    expect(shouldEnsureLogs("completed", 5, 21)).toBe(false);
+  });
+
+  it("returns false when status is 'paused'", () => {
+    expect(shouldEnsureLogs("paused", 5, 21)).toBe(false);
+  });
+
+  it("returns false when status is 'cancelled'", () => {
+    expect(shouldEnsureLogs("cancelled", 0, 21)).toBe(false);
+  });
+
+  it("returns false when completedDays equals totalDays (target met)", () => {
+    expect(shouldEnsureLogs("active", 21, 21)).toBe(false);
+  });
+
+  it("returns false when completedDays exceeds totalDays (over-completed)", () => {
+    expect(shouldEnsureLogs("active", 25, 21)).toBe(false);
+  });
+
+  it("returns true on the very first day (completedDays = 0)", () => {
+    expect(shouldEnsureLogs("active", 0, 21)).toBe(true);
+  });
+});
+
+// ─── getDashboardState ────────────────────────────────────────────────────────
+
+const activeTreatment = () =>
+  ({
+    id: "t-active",
+    child_name: "Emma",
+    start_date: "2026-06-01",
+    total_days: 21,
+    turns_per_day: 1,
+    reminder_time: null,
+    status: "active" as const,
+    notes: null,
+    completed_at: null,
+    created_at: "2026-06-01T00:00:00Z",
+    updated_at: "2026-06-01T00:00:00Z",
+  });
+
+const completedTreatment = () =>
+  ({
+    ...activeTreatment(),
+    id: "t-done",
+    status: "completed" as const,
+    completed_at: "2026-06-22T10:00:00Z",
+  });
+
+describe("getDashboardState", () => {
+  it("returns 'active' when there is an active treatment", () => {
+    const state: DashboardState = getDashboardState(activeTreatment(), completedTreatment());
+    expect(state).toBe("active");
+  });
+
+  it("returns 'active' when active treatment is present even without history", () => {
+    const state: DashboardState = getDashboardState(activeTreatment(), null);
+    expect(state).toBe("active");
+  });
+
+  it("returns 'has_history' when no active treatment but history exists", () => {
+    const state: DashboardState = getDashboardState(null, completedTreatment());
+    expect(state).toBe("has_history");
+  });
+
+  it("returns 'empty' when both active and latest are null", () => {
+    const state: DashboardState = getDashboardState(null, null);
+    expect(state).toBe("empty");
+  });
+
+  it("latest being the same as active does not cause 'has_history'", () => {
+    const t = activeTreatment();
+    const state: DashboardState = getDashboardState(t, t);
+    expect(state).toBe("active");
+  });
+});
+
+// ─── calculateProgress — completed treatment (non-active) ─────────────────────
+
+describe("calculateProgress — completed treatment", () => {
+  it("estimatedEndDate is null for a completed treatment", () => {
+    const treatment = {
+      ...baseTreatment(21),
+      status: "completed" as const,
+      completed_at: "2026-06-22T10:00:00Z",
+    };
+    const logs = Array.from({ length: 21 }, (_, i) =>
+      makeLog({ log_date: addDays("2026-06-01", i), status: "done" })
+    );
+    const p = calculateProgress(treatment, logs);
+    expect(p.isComplete).toBe(true);
+    expect(p.estimatedEndDate).toBeNull();
+  });
+
+  it("estimatedEndDate is null for a paused treatment even if incomplete", () => {
+    const treatment = {
+      ...baseTreatment(21),
+      status: "paused" as const,
+      completed_at: null,
+    };
+    const logs = [makeLog({ log_date: "2026-06-01", status: "done" })];
+    const p = calculateProgress(treatment, logs);
+    expect(p.isComplete).toBe(false);
+    expect(p.estimatedEndDate).toBeNull();
   });
 });
 

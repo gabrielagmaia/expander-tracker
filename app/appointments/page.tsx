@@ -52,7 +52,7 @@ export default function AppointmentsPage() {
         title="No treatment yet"
         description="Create a treatment first to track dentist visits."
         actionLabel="Create treatment"
-        actionHref="/treatment/new"
+        actionHref="/treatments/new"
       />
     );
   }

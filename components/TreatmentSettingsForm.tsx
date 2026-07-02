@@ -68,7 +68,14 @@ export default function TreatmentSettingsForm({
         status: form.status,
       });
       setSaved(true);
-      router.refresh();
+
+      // After completing or cancelling, go to the treatments history page
+      // so the user sees the record instead of a blank screen.
+      if (form.status === "completed" || form.status === "cancelled") {
+        router.push("/treatments");
+      } else {
+        router.refresh();
+      }
     } catch {
       setError("Could not save settings. Please try again.");
     } finally {
@@ -192,7 +199,15 @@ export default function TreatmentSettingsForm({
               <option value="active">Active</option>
               <option value="paused">Paused</option>
               <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
             </select>
+            {(form.status === "completed" || form.status === "cancelled") && (
+              <p className="text-amber-600 text-xs mt-1.5">
+                {form.status === "completed"
+                  ? "Marking as completed will stop log generation and move this treatment to history."
+                  : "Marking as cancelled will stop log generation and archive this treatment."}
+              </p>
+            )}
           </div>
 
           <div>

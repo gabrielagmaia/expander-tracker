@@ -33,7 +33,7 @@ export default function NewAppointmentPage() {
         title="No treatment yet"
         description="Create a treatment first."
         actionLabel="Create treatment"
-        actionHref="/treatment/new"
+        actionHref="/treatments/new"
       />
     );
   }

@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, CalendarDays, ListChecks, Settings } from "lucide-react";
+import { Home, CalendarDays, History, Settings } from "lucide-react";
 import ExpanderIcon from "./ExpanderIcon";
 
 const navLinks = [
   { href: "/", label: "Home", Icon: Home },
-  { href: "/days", label: "Days", Icon: ListChecks },
+  { href: "/treatments", label: "Treats", Icon: History },
   { href: "/appointments", label: "Visits", Icon: CalendarDays },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];
@@ -27,7 +27,10 @@ export default function AppHeader() {
           </Link>
           <nav className="flex gap-0.5">
             {navLinks.map(({ href, label, Icon }) => {
-              const active = pathname === href;
+              const active =
+                href === "/"
+                  ? pathname === "/"
+                  : pathname === href || pathname.startsWith(href + "/");
               return (
                 <Link
                   key={href}

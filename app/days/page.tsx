@@ -54,7 +54,7 @@ export default function DaysPage() {
         title="No treatment yet"
         description="Create a treatment first to start the daily checklist."
         actionLabel="Create treatment"
-        actionHref="/treatment/new"
+        actionHref="/treatments/new"
       />
     );
   }

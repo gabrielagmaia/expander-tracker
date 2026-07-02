@@ -1,4 +1,4 @@
-export type TreatmentStatus = "active" | "completed" | "paused";
+export type TreatmentStatus = "active" | "completed" | "paused" | "cancelled";
 
 export type DailyLogStatus =
   | "pending"
@@ -23,6 +23,7 @@ export interface ExpanderTreatment {
   reminder_time: string | null; // HH:MM
   status: TreatmentStatus;
   notes: string | null;
+  completed_at: string | null; // ISO timestamp — set when status transitions to 'completed'
   created_at: string;
   updated_at: string;
 }
@@ -65,3 +66,6 @@ export interface TreatmentProgress {
   /** YYYY-MM-DD estimate assuming no future misses; null when treatment is complete. */
   estimatedEndDate: string | null;
 }
+
+/** Which of the three dashboard states to render. */
+export type DashboardState = "active" | "has_history" | "empty";
